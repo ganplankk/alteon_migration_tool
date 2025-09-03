@@ -1,7 +1,4 @@
 import re
-import random
-import json
-# from main import allowed_ports
 
 class Configuration:
     def __init__(self):
@@ -23,7 +20,6 @@ class Configuration:
         self.group_members = {}
         self.slb_conf = {}
         self.slb_final_config = {}
-        self.result = []
         # self.slb_service_info = {}
 
     def port_desc(self, config_text: str, allowed_ports: dict):
@@ -52,8 +48,23 @@ class Configuration:
                 continue
             out.append(f'port {self.allowed_ports[p]} description {quote_delete(n)}')
         out.append(f'!!')
-        self.result = out
-        return self.result
+        return out
+
+    def port_boundary(self, allowed_ports: dict):
+        self.allowed_ports = allowed_ports
+        if self.allowed_ports is None:
+            raise ValueError("allowed_ports가 None입니다.")
+
+        out = []
+        p_list = []
+        out.append(f'!! Port Boundary Configuration')
+        out.append(f'port-boundary 10')
+        for p in sorted(self.allowed_ports.keys(), key=lambda x: int(x)):
+            p_list.append(f'{self.allowed_ports[p]}')
+        out.append("port "+", ".join(p_list))
+        out.append(f'apply')
+        out.append(f'!!')
+        return out
 
     def vlan_create(self, config_text: str, allowed_ports: dict):
         self.allowed_ports = allowed_ports
@@ -102,8 +113,7 @@ class Configuration:
             out.append(f"vlan v{vid} vid {vid}")
             out.append(f"vlan v{vid} port {','.join(sorted(ports))} untagged")
         out.append(f'!!')
-        self.result = out
-        return self.result
+        return out
     def ip_config(self, config_text: str):
         p_cmd = re.compile(r'^\s*/c/.*$', re.I)
         p_if = re.compile(r'^\s*/c/l3/if\s+(\d+)\s*$', re.I)
@@ -153,8 +163,7 @@ class Configuration:
             if ip_info['ip'] and ip_info['mask'] and ip_info['vid']:
                 out.append(f"interface v{ip_info['vid']} ip address {ip_info['ip']}/{ip_info['prefix']}")
         out.append(f'!!')
-        self.result = out
-        return self.result
+        return out
     def default_gateway(self, config_text: str):
         p_cmd = re.compile(r'^\s*/c/.*$', re.I)
         p_gw = re.compile(r'^\s*/c/l3/gw\s+(\d+)\s*$', re.I)
@@ -180,8 +189,7 @@ class Configuration:
         for num, addr in self.default_gw.items():
             out.append(f"route default gateway {addr} priority {101 - int(num)}")
         out.append(f'!! ')
-        self.result = out
-        return self.result
+        return out
     def static_routing(self, config_text: str):
         p_route_block = re.compile(r'^\s*/c/l3/route/ip4\s*$', re.I)
         p_add = re.compile(r'^\s*add\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(\d+)\s*$', re.I)
@@ -205,8 +213,7 @@ class Configuration:
             if line.startswith("/c/") and not p_route_block.match(line):
                 cur_block = None
 
-        self.result = out
-        return self.result
+        return out
     ## VRRP VIP 및 SLB VIP 파싱
     def vrrp_config(self, config_text: str):
 
@@ -359,8 +366,7 @@ class Configuration:
         else:
             out.append("# VRRP VIP 주소가 없습니다.")
         out.append(f'!! ')
-        self.result = out
-        return self.result
+        return out
     def parse_group_members(self, config_text: str):
         p_group_blk = re.compile(r'^\s*/c/slb/group\s+(\d+)\s*$', re.I)
         p_add = re.compile(r'^\s*add\s+(\d+)\s*$', re.I)
@@ -375,20 +381,25 @@ class Configuration:
                 self.group_members.setdefault(cur_gid, [])
                 continue
 
+            # if cur_gid is not None:
+            #     m = p_add.match(line)
+            #     if m:
+            #         rid = m.group(1)
+            #         self.group_members[cur_gid].append(rid)
+            #         continue
             if cur_gid is not None:
                 m = p_add.match(line)
                 if m:
                     rid = m.group(1)
-                    self.group_members[cur_gid].append(rid)
+                    if rid not in self.group_members[cur_gid]:  # ✅ 중복 방지
+                        self.group_members[cur_gid].append(rid)
                     continue
-
             # 다른 /c/ 블록 만나면 해제
             if line.startswith("/c/") and not p_group_blk.match(line):
                 cur_gid = None
 
         return self.group_members
     def slb_services_with_real_members(self):
-
         for virt_id, info in self.slb_info.items():
             vports = info.get("vport", {})
             groups = info.get("group", {})
@@ -462,8 +473,8 @@ class Configuration:
                 out.append(f"apply")
                 out.append(f"exit")
                 out.append(f"!! ")
-        self.real_list = real_info
-        return self.result.append(out)
+
+        return out
     def slb_config(self, config_text: str):
         self.vrrp_config(config_text)
         self.parse_group_members(config_text)
@@ -547,8 +558,8 @@ class Configuration:
                 out.append(f"retry {info.get('retry') or 3}")
                 i += 1
         out.append(f'!! ')
-        self.result = out
-        return self.result
+
+        return out
 
     def health_check_ports(self):
         port_list = []
@@ -577,14 +588,43 @@ class Configuration:
                 out.append(f"health-check {ids[i]}")
                 if members:
                     out.append(f"real {','.join(members)}")
+                    out.append("apply")
                     out.append("exit")
                 else:
                     out.append(f"")
+                    out.append("apply")
                     out.append("exit")
                 i += 1
             out.append(f'!! ')
-            self.result = out
-            return self.result
+
+            return out
+
+    def finalize(self, alteon_conf: str, allowed_ports: dict):
+        sections = []
+        sections += self.port_desc(alteon_conf, allowed_ports)
+        sections += self.port_boundary(allowed_ports)
+        sections += self.vlan_create(alteon_conf, allowed_ports)
+        sections += self.ip_config(alteon_conf)
+        sections += self.default_gateway(alteon_conf)
+        sections += self.static_routing(alteon_conf)
+
+        self.slb_config(alteon_conf)
+        sections += self.real_config(alteon_conf)
+        sections += self.health_check(alteon_conf)
+        sections += self.health_check_apply()
+
+
+        # 출력: 콤마 포함 줄만 개행 분할
+        for line in sections:
+            # if line.startswith("real "):
+            #     for part in line[len("real "):].split(","):
+            #         print("real " + part.strip())
+            if "!!" in line:
+                for part in line.split(","):
+                    print(part.strip())
+            else:
+                print(line)
+
 
 def quote_delete(s: str) -> str:
     # if re.search(r'\s|[#";]', s):

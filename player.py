@@ -10,4 +10,4 @@ migration.static_routing(alteon_conf)
 migration.real_config(alteon_conf)
 migration.slb_config(alteon_conf)
 migration.health_check(alteon_conf)
-final = migration.result
+migration.finalize(alteon_conf,allowed_ports)
