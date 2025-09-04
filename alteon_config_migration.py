@@ -614,7 +614,6 @@ class Configuration:
         sections += self.health_check_apply()
         return sections
 
-
 def quote_delete(s: str) -> str:
     # if re.search(r'\s|[#";]', s):
     if re.search(r'\s|\"', s):

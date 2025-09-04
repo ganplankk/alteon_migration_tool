@@ -21,8 +21,6 @@ def main():
     try:
         with open(path, "r", encoding="utf-8") as f:
             alteon_conf = f.read()
-            print(f"파일 읽기 완료: {path}")
-
     except FileNotFoundError:
         print("파일을 찾을 수 없습니다")
         main()
@@ -40,7 +38,7 @@ def main():
         print(f"알 수 없는 모델 : {model}")
         main()
 
-    with open(os.path.join(os.path.dirname(path), "new_conf.txt"), "w", encoding="utf-8") as new_Conf:
+    with open(os.path.join(os.path.dirname(path), "new_PAS-K_Conf.txt"), "w", encoding="utf-8") as new_Conf:
         migration = Configuration()
         conf = migration.finalize(alteon_conf, allowed_ports)
 
