@@ -462,9 +462,9 @@ class Configuration:
                 cur_real = None
 
         out = []
+        out.append(f"!!Real Configuration")
         for real_id, info in real_info.items():
             if info['id'] and info['rip']:
-                out.append(f"!!Real Configuration")
                 out.append(f"real {info['id']}")
                 out.append(f"rip {info['rip']}")
                 out.append(f"backup {info.get('backup') or ''}")
@@ -472,7 +472,7 @@ class Configuration:
                 out.append(f"health-check {info.get('hc') or ''}")
                 out.append(f"apply")
                 out.append(f"exit")
-                out.append(f"!! ")
+        out.append(f"!! ")
 
         return out
     def slb_config(self, config_text: str):
@@ -612,18 +612,7 @@ class Configuration:
         sections += self.real_config(alteon_conf)
         sections += self.health_check(alteon_conf)
         sections += self.health_check_apply()
-
-
-        # 출력: 콤마 포함 줄만 개행 분할
-        for line in sections:
-            # if line.startswith("real "):
-            #     for part in line[len("real "):].split(","):
-            #         print("real " + part.strip())
-            if "!!" in line:
-                for part in line.split(","):
-                    print(part.strip())
-            else:
-                print(line)
+        return sections
 
 
 def quote_delete(s: str) -> str:
